@@ -1,0 +1,18 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Long article fixture</title>
+<style>
+body{font:17px/1.6 Georgia,serif;margin:0;color:#222}
+header{position:sticky;top:0;background:#1a73e8;color:#fff;padding:14px 24px;font:bold 18px sans-serif;z-index:9}
+main{max-width:760px;margin:0 auto;padding:24px}
+.band{height:30px;background:#eee;font:12px monospace;padding:4px}
+figure{margin:24px 0} .ph{height:340px;background:linear-gradient(135deg,#f6b26b,#6fa8dc);display:flex;align-items:center;justify-content:center;font:bold 40px sans-serif;color:#fff}
+#cookie{position:fixed;bottom:0;left:0;right:0;background:#333;color:#fff;padding:16px}
+</style></head><body>
+<header>Fixture News — sticky header</header>
+<main id="m"></main>
+<div id="cookie">We use cookies (hide me with --hide "#cookie")</div>
+<script>
+const m=document.getElementById('m'); const lorem='Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. ';
+for(let s=1;s<=40;s++){ const h=document.createElement('h2'); h.textContent='Section '+s; m.appendChild(h);
+ for(let p=0;p<3;p++){const e=document.createElement('p'); e.textContent=('['+s+'.'+p+'] ')+lorem.repeat(1+p%2); m.appendChild(e);}
+ if(s%4==0){m.insertAdjacentHTML('beforeend','<figure><div class="ph">Figure '+s+'</div><figcaption>Caption for figure '+s+'</figcaption></figure>');}}
+</script></body></html>

@@ -1,0 +1,6 @@
+<!doctype html><html><head><meta charset="utf-8"><title>SPA inner scroller</title>
+<style>html,body{height:100%;margin:0;overflow:hidden;font:15px/1.5 sans-serif}
+.app{display:flex;height:100vh}.side{width:220px;background:#202124;color:#fff;padding:16px}
+.content{flex:1;overflow-y:auto;padding:24px}.row{padding:10px;border-bottom:1px solid #ddd}</style></head>
+<body><div class="app"><nav class="side">Sidebar</nav><div class="content" id="c"></div></div>
+<script>const c=document.getElementById('c');for(let i=1;i<=300;i++){c.insertAdjacentHTML('beforeend','<div class="row">Row '+i+' — inner scroll container content</div>')}c.insertAdjacentHTML('beforeend','<div class="row"><b>END OF LIST</b></div>')</script></body></html>

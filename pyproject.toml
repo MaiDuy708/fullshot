@@ -1,0 +1,27 @@
+[project]
+name = "fullshot"
+version = "0.1.0"
+description = "Full-page web screenshots with smart page splitting and URL/date stamps - CLI + MCP server for AI agents"
+license = "MIT"
+keywords = ["screenshot", "full-page", "mcp", "playwright", "pdf", "agent"]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.2",
+    "pillow>=12.3.0",
+    "playwright>=1.65.2",
+    "reportlab>=5.1.0",
+]
+
+[project.scripts]
+fullshot = "fullshot.cli:main"
+fullshot-mcp = "fullshot.server:main"
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]

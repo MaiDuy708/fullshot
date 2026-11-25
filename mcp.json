@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "fullshot": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": ["--from", "${PLUGIN_ROOT}", "fullshot-mcp"],
+      "env": {
+        "FULLSHOT_OUTPUT_DIR": "${FULLSHOT_OUTPUT_DIR}",
+        "FULLSHOT_BROWSER_CHANNEL": "${FULLSHOT_BROWSER_CHANNEL}"
+      }
+    }
+  }
+}

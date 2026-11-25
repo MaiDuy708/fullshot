@@ -1,0 +1,11 @@
+{
+  "name": "fullshot",
+  "owner": { "name": "MaiDuy708", "url": "https://github.com/MaiDuy708" },
+  "plugins": [
+    {
+      "name": "fullshot",
+      "source": "./",
+      "description": "Full-page web screenshots with smart page splitting and URL/date stamps (MCP server + skill)."
+    }
+  ]
+}

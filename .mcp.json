@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "fullshot": {
+      "command": "uvx",
+      "args": ["--from", "${CLAUDE_PLUGIN_ROOT}", "fullshot-mcp"],
+      "env": {
+        "FULLSHOT_OUTPUT_DIR": "${FULLSHOT_OUTPUT_DIR:-}"
+      }
+    }
+  }
+}

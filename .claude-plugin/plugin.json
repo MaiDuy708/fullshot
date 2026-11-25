@@ -1,0 +1,20 @@
+{
+  "name": "fullshot",
+  "version": "0.1.0",
+  "description": "Full-page web screenshots for AI agents: PNG/JPEG/PDF, smart page splitting that never cuts a text line, and URL + date/time stamps.",
+  "license": "MIT",
+  "keywords": [
+    "screenshot",
+    "full-page",
+    "pdf",
+    "archive",
+    "playwright",
+    "mcp"
+  ],
+  "homepage": "https://github.com/MaiDuy708/fullshot",
+  "repository": "https://github.com/MaiDuy708/fullshot",
+  "author": {
+    "name": "Mai Duy",
+    "url": "https://github.com/MaiDuy708"
+  }
+}
