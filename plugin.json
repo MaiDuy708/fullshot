@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "fullshot",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Full-page web screenshots for AI agents: PNG/JPEG/PDF, smart page splitting that never cuts a text line, and URL + date/time stamps.",
   "license": "MIT",
   "keywords": [

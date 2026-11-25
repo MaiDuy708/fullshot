@@ -27,6 +27,7 @@ One repository is both a portable **Agent Plugins v1** package (`plugin.json` +
 | **URL + date/time stamp** | `top` / `bottom` bar, or a neutral `browser` frame. Date formats: `date`, `datetime`, `iso`, `none`, or any strftime pattern. Local time or UTC. In a PDF the URL is a clickable link. |
 | PDF | Paper: letter, legal, tabloid, A3, A4, A5, each with a `-landscape` variant, plus `full` (one long page, split at the 200 in PDF limit). Page numbers. Lossless or JPEG images. |
 | Evidence | URL, title and capture time embedded in PNG/JPEG/PDF metadata. A `.json` sidecar holds SHA-256 hashes of every file. |
+| No overwrites | If any output exists, the entire capture or `image_to_pdf` export gets a shared `-1`, `-2`, … basename suffix, including all image parts and the `.json` sidecar. |
 | Extras | `selector` (one element), `hide_selectors` (cookie banners), `freeze_fixed`, `scale` (retina), mobile `width`, dark mode, and `cdp_url` to use your logged-in Chrome. |
 
 Smart splitting on real pages (A4, 1280 px wide), counting cuts that slice

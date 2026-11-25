@@ -12,7 +12,9 @@ from PIL import Image
 
 from . import __version__
 from .capture import CaptureOptions, CaptureResult, capture, default_basename, resolve_output_dir
-from .export import PAPERS, SplitInfo, StampInfo, sha256, write_images, write_pdf
+from .export import (
+    PAPERS, SplitInfo, StampInfo, image_parts, image_suffixes, output_info, reserve_outputs, write_images, write_pdf,
+)
 from .splitter import LayoutMasks
 from .stamp import DATE_FORMATS, STYLES, format_time
 
@@ -60,7 +62,9 @@ def export(result: CaptureResult, ex: ExportOptions) -> dict[str, Any]:
     ex.validate()
     out_dir = resolve_output_dir(ex.output_dir)
     when = result.captured_at if ex.timezone == "local" else result.captured_at.astimezone(_tz.utc)
-    base = out_dir / (ex.basename or default_basename(result.final_url or result.url, when))
+    name = ex.basename or default_basename(result.final_url or result.url, when)
+    # Keep the previous output stem before adding part numbers or collision suffixes.
+    base = (out_dir / name).with_suffix("")
     stamp_url = result.final_url or result.url
     stamp = StampInfo(stamp_url, format_time(when, ex.date_format), ex.stamp)
     split = SplitInfo(result.masks, ex.smart_split, ex.max_back)
@@ -71,54 +75,63 @@ def export(result: CaptureResult, ex: ExportOptions) -> dict[str, Any]:
         "Software": f"fullshot {__version__}",
     }
 
-    files: list[dict[str, Any]] = []
-    for fmt in ex.formats:
-        if fmt in ("png", "jpeg"):
-            paths = write_images(
-                result.image, base, fmt, result.scale, stamp, split, ex.max_image_height, ex.jpeg_quality, meta
-            )
-            for p in paths:
-                with Image.open(p) as im:
-                    size = im.size
-                files.append({"path": str(p), "format": fmt, "width": size[0], "height": size[1]})
-        elif fmt == "pdf":
-            path, pages, _ = write_pdf(
-                result.image,
-                base.with_suffix(".pdf"),
-                result.scale,
-                stamp,
-                split,
-                paper=ex.paper,
-                margin_pt=ex.margin_pt,
-                title=result.title,
-                page_numbers=ex.page_numbers,
-                image_format=ex.pdf_image_format,
-                quality=ex.jpeg_quality,
-            )
-            files.append({"path": str(path), "format": "pdf", "pages": pages, "paper": ex.paper})
-
-    for f in files:
-        f["sha256"] = sha256(Path(f["path"]))
-        f["bytes"] = Path(f["path"]).stat().st_size
-
-    summary: dict[str, Any] = {
-        "url": result.url,
-        "final_url": result.final_url,
-        "title": result.title,
-        "captured_at": when.isoformat(timespec="seconds"),
-        "page_css_size": [result.css_width, result.css_height],
-        "device_scale": result.scale,
-        "image_size": list(result.image.size),
-        "truncated": result.truncated,
-        "files": files,
-        "notes": result.notes,
-        "options": {k: v for k, v in asdict(ex).items() if k not in ("output_dir", "basename")},
-        "software": f"fullshot {__version__}",
+    parts = (
+        image_parts(result.image, result.scale, stamp, split, ex.max_image_height)
+        if any(fmt != "pdf" for fmt in ex.formats) else []
+    )
+    groups = {
+        fmt: [".pdf"] if fmt == "pdf" else image_suffixes(fmt, len(parts))
+        for fmt in dict.fromkeys(ex.formats)
     }
+    suffixes = [suffix for group in groups.values() for suffix in group]
     if ex.write_metadata:
-        meta_path = base.with_suffix(".json")
-        meta_path.write_text(json.dumps(summary, indent=2, ensure_ascii=False), encoding="utf-8")
-        summary["metadata_file"] = str(meta_path)
+        suffixes.append(".json")
+
+    with reserve_outputs(base, suffixes) as outputs:
+        files_by_format: dict[str, list[dict[str, Any]]] = {}
+        for fmt, group in groups.items():
+            if fmt == "pdf":
+                output = outputs[".pdf"]
+                pages, _ = write_pdf(
+                    result.image,
+                    output,
+                    result.scale,
+                    stamp,
+                    split,
+                    paper=ex.paper,
+                    margin_pt=ex.margin_pt,
+                    title=result.title,
+                    page_numbers=ex.page_numbers,
+                    image_format=ex.pdf_image_format,
+                    quality=ex.jpeg_quality,
+                )
+                files_by_format[fmt] = [{**output_info(output), "format": fmt, "pages": pages, "paper": ex.paper}]
+            else:
+                images = [outputs[suffix] for suffix in group]
+                sizes = write_images(result.image, images, fmt, result.scale, stamp, parts, ex.jpeg_quality, meta)
+                files_by_format[fmt] = [
+                    {**output_info(output), "format": fmt, "width": width, "height": height}
+                    for output, (width, height) in zip(images, sizes, strict=True)
+                ]
+
+        summary: dict[str, Any] = {
+            "url": result.url,
+            "final_url": result.final_url,
+            "title": result.title,
+            "captured_at": when.isoformat(timespec="seconds"),
+            "page_css_size": [result.css_width, result.css_height],
+            "device_scale": result.scale,
+            "image_size": list(result.image.size),
+            "truncated": result.truncated,
+            "files": [entry.copy() for fmt in ex.formats for entry in files_by_format[fmt]],
+            "notes": result.notes,
+            "options": {k: v for k, v in asdict(ex).items() if k not in ("output_dir", "basename")},
+            "software": f"fullshot {__version__}",
+        }
+        if ex.write_metadata:
+            output = outputs[".json"]
+            output.write(json.dumps(summary, indent=2, ensure_ascii=False).encode("utf-8"))
+            summary["metadata_file"] = str(output.name)
     return summary
 
 

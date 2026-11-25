@@ -1,6 +1,6 @@
 [project]
 name = "fullshot"
-version = "0.1.0"
+version = "0.1.1"
 description = "Full-page web screenshots with smart page splitting and URL/date stamps - CLI + MCP server for AI agents"
 license = "MIT"
 keywords = ["screenshot", "full-page", "mcp", "playwright", "pdf", "agent"]

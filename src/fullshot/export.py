@@ -3,8 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import os
+from collections.abc import Iterator
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
+from itertools import count
 from pathlib import Path
+from typing import BinaryIO
 
 from PIL import Image, PngImagePlugin
 from reportlab.lib.utils import ImageReader
@@ -43,18 +48,49 @@ class SplitInfo:
     max_back: float = 0.25
 
 
-def sha256(path: Path) -> str:
+def _unlink_reservation(path: Path, created: os.stat_result) -> None:
+    try:
+        if os.path.samestat(path.lstat(), created):
+            path.unlink()
+    except FileNotFoundError:
+        pass
+
+
+@contextmanager
+def reserve_outputs(base: Path, suffixes: list[str]) -> Iterator[dict[str, BinaryIO]]:
+    """Claim every output for one basename before writing (not atomic publication)."""
+    ordered = sorted(suffixes)
+    for index in count():
+        name = f"{base.name}-{index}" if index else base.name
+        outputs: dict[str, BinaryIO] = {}
+        with ExitStack() as rollback:
+            with ExitStack() as opened:
+                try:
+                    for suffix in ordered:
+                        path = base.with_name(name + suffix)
+                        # Keep the exclusive handle; reopening the path to write could clobber a replacement.
+                        output = opened.enter_context(path.open("x+b"))
+                        outputs[suffix] = output
+                        rollback.callback(_unlink_reservation, path, os.fstat(output.fileno()))
+                except FileExistsError:
+                    continue
+                yield outputs
+            rollback.pop_all()
+        return
+
+
+def output_info(output: BinaryIO) -> dict[str, str | int]:
+    size = output.seek(0, os.SEEK_END)
+    output.seek(0)
     h = hashlib.sha256()
-    with open(path, "rb") as fh:
-        for chunk in iter(lambda: fh.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+    for chunk in iter(lambda: output.read(1 << 20), b""):
+        h.update(chunk)
+    return {"path": str(output.name), "bytes": size, "sha256": h.hexdigest()}
 
 
-def _part_path(base: Path, index: int, total: int, ext: str) -> Path:
-    if total <= 1:
-        return base.with_suffix(ext)
-    return base.with_name(f"{base.name}-part{index}").with_suffix(ext)
+def image_suffixes(fmt: str, total: int) -> list[str]:
+    ext = ".png" if fmt == "png" else ".jpg"
+    return [ext] if total == 1 else [f"-part{i}{ext}" for i in range(1, total + 1)]
 
 
 def _png_info(meta: dict[str, str]) -> PngImagePlugin.PngInfo:
@@ -65,46 +101,44 @@ def _png_info(meta: dict[str, str]) -> PngImagePlugin.PngInfo:
     return info
 
 
-def write_images(
-    img: Image.Image,
-    base: Path,
-    fmt: str,
-    scale: float,
-    stamp: StampInfo,
-    split: SplitInfo,
-    max_height: int,
-    quality: int = 92,
-    meta: dict[str, str] | None = None,
-) -> list[Path]:
-    """Save ``img`` as one or more PNG/JPEG files.
-
-    Images taller than ``max_height`` (image px) are cut into parts at smart
-    break lines. The stamp bar is added to every part.
-    """
-    meta = meta or {}
+def image_parts(
+    img: Image.Image, scale: float, stamp: StampInfo, split: SplitInfo, max_height: int,
+) -> list[tuple[int, int]]:
     bar_h = stamp_mod.bar_height(stamp.style, scale)
     page_h = max(256, max_height - bar_h)
     pixels = PixelRows(img) if split.smart else None
     breaks = choose_breaks(img.height, page_h, split.masks, pixels, split.max_back, split.smart)
-    parts = slices(img.height, breaks)
-    ext = ".png" if fmt == "png" else ".jpg"
-    paths: list[Path] = []
-    for i, (top, bottom) in enumerate(parts, start=1):
+    return slices(img.height, breaks)
+
+
+def write_images(
+    img: Image.Image,
+    outputs: list[BinaryIO],
+    fmt: str,
+    scale: float,
+    stamp: StampInfo,
+    parts: list[tuple[int, int]],
+    quality: int = 92,
+    meta: dict[str, str] | None = None,
+) -> list[tuple[int, int]]:
+    """Save stamped PNG/JPEG parts to reserved streams; return their dimensions."""
+    meta = meta or {}
+    sizes: list[tuple[int, int]] = []
+    for i, ((top, bottom), output) in enumerate(zip(parts, outputs, strict=True), start=1):
         piece = img.crop((0, top, img.width, bottom))
         piece = stamp_mod.apply_stamp(piece, stamp.url, stamp.time_text, stamp.style, scale)
-        path = _part_path(base, i, len(parts), ext)
         part_meta = dict(meta, Part=f"{i}/{len(parts)}") if len(parts) > 1 else meta
         if fmt == "png":
-            piece.save(path, "PNG", pnginfo=_png_info(part_meta), optimize=False)
+            piece.save(output, "PNG", pnginfo=_png_info(part_meta), optimize=False)
         else:
             exif = Image.Exif()
             exif[0x010E] = meta.get("URL", "")  # ImageDescription
             exif[0x0131] = "fullshot"  # Software
             if meta.get("CaptureTime"):
                 exif[0x0132] = meta["CaptureTime"]
-            piece.convert("RGB").save(path, "JPEG", quality=quality, optimize=True, exif=exif)
-        paths.append(path)
-    return paths
+            piece.convert("RGB").save(output, "JPEG", quality=quality, optimize=True, exif=exif)
+        sizes.append(piece.size)
+    return sizes
 
 
 def paper_size(paper: str) -> tuple[float, float]:
@@ -118,7 +152,7 @@ def paper_size(paper: str) -> tuple[float, float]:
 
 def write_pdf(
     img: Image.Image,
-    path: Path,
+    output: BinaryIO,
     scale: float,
     stamp: StampInfo,
     split: SplitInfo,
@@ -128,8 +162,8 @@ def write_pdf(
     page_numbers: bool = True,
     image_format: str = "png",
     quality: int = 92,
-) -> tuple[Path, int, list[int]]:
-    """Write a paginated PDF. Returns (path, page_count, break_lines)."""
+) -> tuple[int, list[int]]:
+    """Write a paginated PDF to a reserved stream. Returns (page_count, break_lines)."""
     show_stamp = stamp.style != "none"
     stamp_on_bottom = stamp.style == "bottom"
     header_h = 20.0 if show_stamp and not stamp_on_bottom else 0.0
@@ -157,7 +191,7 @@ def write_pdf(
     parts = slices(img.height, breaks)
 
     pt_per_px = content_w / img.width
-    c = pdf_canvas.Canvas(str(path), pageCompression=1)
+    c = pdf_canvas.Canvas(output, pageCompression=1)
     c.setTitle(title or stamp.url)
     c.setSubject(stamp.url)
     c.setCreator("fullshot")
@@ -206,4 +240,4 @@ def write_pdf(
             c.drawCentredString(page_w / 2, margin_pt + 4, f"{i} / {total}")
         c.showPage()
     c.save()
-    return path, total, breaks
+    return total, breaks
